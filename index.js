@@ -1,6 +1,13 @@
 require('dotenv').config();
 const { TwitterApi } = require('twitter-api-v2');
 const app = require('express')();
+const { CronJob } = require('cron');
+
+const Groq = require('groq-sdk');
+
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+});
 
 const client = new TwitterApi({
     appKey: process.env.API_KEY,
@@ -16,8 +23,15 @@ const twitterBearer = bearer.readOnly;
 
 async function postTweet() {
     try {
-        const d = await twitterClient.v2.tweet("Hi dear, I am here to post about programming");
-        console.log(d);
+        const answer = await groq.chat.completions.create({
+            model: 'gemma-7b-it',
+            messages: [
+                { role: 'user', content: 'write a quote on never give up' },
+            ]
+        });
+        const message = answer.choices[0].message.content;
+        const d = await twitterClient.v2.tweet(message);
+        return d;
     } catch (error) {
         console.error(error);
     }
@@ -29,7 +43,7 @@ app.get('/', (req, res) => {
 
 app.get('/tweet', async (req, res) => {
     try {
-        const d = await twitterClient.v2.tweet("Hi dear, I am here to post about programming");
+        const d = await postTweet();
         res.send(d);
     } catch (error) {
         res.send(error);
@@ -39,3 +53,9 @@ app.get('/tweet', async (req, res) => {
 app.listen(3000, () => {
     console.log('Server is running on port 3000');
 });
+
+const cronTweet = new CronJob("30 * * * * *", async () => {
+    postTweet();
+});
+
+cronTweet.start();
